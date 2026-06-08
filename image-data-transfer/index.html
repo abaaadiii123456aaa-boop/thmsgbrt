@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ناقل بيانات الصور</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-light: #6366f1;
+      --primary-dark: #3730a3;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #273548;
+      --border: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      direction: rtl;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 4px 20px rgba(79,70,229,0.4);
+    }
+    header .logo { font-size: 2rem; }
+    header h1 { font-size: 1.6rem; font-weight: 700; }
+    header p  { font-size: 0.9rem; opacity: 0.85; }
+
+    /* ── Steps Bar ── */
+    .steps-bar {
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      padding: 28px 40px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 24px;
+      border-radius: 50px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      transition: all .3s;
+      cursor: default;
+    }
+    .step.active { background: var(--primary); color: #fff; font-weight: 600; }
+    .step.done   { color: var(--success); }
+    .step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    .step.active .step-num { background: rgba(255,255,255,0.25); }
+    .step.done   .step-num { background: var(--success); color: #fff; }
+    .step-arrow { color: var(--border); font-size: 1.2rem; padding: 0 6px; }
+
+    /* ── Main Layout ── */
+    main { max-width: 1200px; margin: 0 auto; padding: 40px 24px; }
+
+    /* ── Upload Section ── */
+    .upload-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+    @media (max-width: 768px) { .upload-grid { grid-template-columns: 1fr; } }
+
+    .upload-card {
+      background: var(--surface);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: border-color .3s, background .3s;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .upload-card:hover { border-color: var(--primary); background: var(--surface2); }
+    .upload-card.has-file { border-style: solid; border-color: var(--success); }
+    .upload-card.drag-over { border-color: var(--primary); background: rgba(79,70,229,0.08); }
+
+    .upload-card input[type=file] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--primary); color: #fff;
+      padding: 4px 12px; border-radius: 20px;
+      font-size: 0.75rem; font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .upload-icon { font-size: 3rem; text-align: center; margin: 12px 0; }
+    .upload-title { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+    .upload-hint  { font-size: 0.82rem; color: var(--text-muted); }
+
+    .preview-box {
+      margin-top: 16px;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+    .preview-box img {
+      width: 100%; max-height: 280px;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+    .preview-clear {
+      position: absolute; top: 8px; left: 8px;
+      background: rgba(0,0,0,.6);
+      color: #fff; border: none; border-radius: 50%;
+      width: 28px; height: 28px;
+      cursor: pointer; font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .2s;
+      z-index: 2;
+    }
+    .preview-clear:hover { background: var(--danger); }
+
+    /* ── OCR Section ── */
+    .ocr-section {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+      display: none;
+    }
+    .ocr-section.visible { display: block; }
+
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .progress-wrap {
+      background: var(--surface2);
+      border-radius: 50px;
+      height: 10px;
+      overflow: hidden;
+      margin: 12px 0;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--primary-light));
+      border-radius: 50px;
+      transition: width .4s ease;
+      width: 0%;
+    }
+    .progress-label { font-size: 0.82rem; color: var(--text-muted); text-align: center; }
+
+    .ocr-result {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      color: var(--text);
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      direction: ltr;
+      text-align: left;
+      display: none;
+    }
+    .ocr-result.visible { display: block; }
+
+    /* ── Controls ── */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .control-group label {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .control-group input[type=range] {
+      width: 100%; accent-color: var(--primary);
+    }
+    .control-group select,
+    .control-group input[type=number] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .range-val {
+      font-size: 0.8rem;
+      color: var(--primary-light);
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    /* ── Canvas Area ── */
+    .canvas-section {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+      display: none;
+    }
+    .canvas-section.visible { display: block; }
+
+    .canvas-wrap {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: crosshair;
+      background: #111;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    .canvas-wrap canvas { display: block; max-width: 100%; height: auto; }
+
+    .canvas-center { text-align: center; }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--surface2);
+      padding: 4px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+    .tab {
+      flex: 1;
+      padding: 9px 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all .2s;
+    }
+    .tab.active { background: var(--primary); color: #fff; font-weight: 600; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 22px;
+      border: none; border-radius: 10px;
+      font-size: 0.92rem; font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+      text-decoration: none;
+    }
+    .btn-primary  { background: var(--primary); color: #fff; }
+    .btn-primary:hover  { background: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(79,70,229,.4); }
+    .btn-success  { background: var(--success); color: #fff; }
+    .btn-success:hover  { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn-warning  { background: var(--warning); color: #000; }
+    .btn-warning:hover  { filter: brightness(1.1); }
+    .btn-ghost    { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover    { background: var(--border); }
+    .btn-lg { padding: 14px 28px; font-size: 1rem; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; transform: none !important; }
+
+    .actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 20px;
+    }
+
+    /* ── Alert ── */
+    .alert {
+      padding: 14px 18px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .alert-info    { background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.3); }
+    .alert-success { background: rgba(16,185,129,.15); border: 1px solid rgba(16,185,129,.3); color: #6ee7b7; }
+    .alert-warning { background: rgba(245,158,11,.15); border: 1px solid rgba(245,158,11,.3); color: #fcd34d; }
+
+    /* ── Position Handle ── */
+    .pos-controls {
+      display: grid;
+      grid-template-columns: repeat(3, 40px);
+      gap: 4px;
+      justify-content: center;
+      margin: 12px auto;
+    }
+    .pos-btn {
+      width: 40px; height: 40px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .2s;
+    }
+    .pos-btn:hover { background: var(--primary); }
+    .pos-btn.center { background: var(--surface); }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface2); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      background: #1e293b; color: #fff;
+      padding: 12px 24px; border-radius: 50px;
+      font-size: 0.9rem; font-weight: 500;
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+      opacity: 0; pointer-events: none;
+      transition: opacity .3s;
+      z-index: 9999;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── Chip ── */
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+    }
+    .chip.green { border-color: var(--success); color: var(--success); }
+
+    /* ── Mode Toggle ── */
+    .mode-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .mode-card {
+      flex: 1;
+      min-width: 180px;
+      padding: 16px;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all .2s;
+      text-align: center;
+    }
+    .mode-card:hover { border-color: var(--primary); }
+    .mode-card.selected { border-color: var(--primary); background: rgba(79,70,229,.12); }
+    .mode-card .mode-icon { font-size: 2rem; margin-bottom: 8px; }
+    .mode-card .mode-label { font-weight: 600; font-size: 0.95rem; }
+    .mode-card .mode-desc  { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">🖼️</div>
+  <div>
+    <h1>ناقل بيانات الصور</h1>
+    <p>انقل البيانات من صورة إلى أخرى بذكاء — مناسب لجداول التوقيعات والحضور</p>
+  </div>
+</header>
+
+<!-- ── STEPS ── -->
+<div class="steps-bar">
+  <div class="step active" id="s1">
+    <div class="step-num">1</div>
+    <span>رفع الصور</span>
+  </div>
+  <div class="step-arrow">‹</div>
+  <div class="step" id="s2">
+    <div class="step-num">2</div>
+    <span>استخراج البيانات</span>
+  </div>
+  <div class="step-arrow">‹</div>
+  <div class="step" id="s3">
+    <div class="step-num">3</div>
+    <span>الدمج والضبط</span>
+  </div>
+  <div class="step-arrow">‹</div>
+  <div class="step" id="s4">
+    <div class="step-num">4</div>
+    <span>التنزيل</span>
+  </div>
+</div>
+
+<main>
+
+  <!-- ── MODE SELECTION ── -->
+  <div class="alert alert-info">
+    <span>ℹ️</span>
+    <div>
+      <strong>كيف يعمل التطبيق:</strong> ارفع صورتين — الأولى تحتوي على توقيعات الموظفين (بدون بيانات)،
+      والثانية تحتوي على بيانات الموظفين (بدون توقيع). سيقوم التطبيق بدمجهما في صورة واحدة.
+    </div>
+  </div>
+
+  <div class="mode-row">
+    <div class="mode-card selected" id="mode-overlay" onclick="setMode('overlay')">
+      <div class="mode-icon">🔀</div>
+      <div class="mode-label">دمج تراكبي</div>
+      <div class="mode-desc">يضع الصورتين فوق بعضهما مع التحكم في الشفافية</div>
+    </div>
+    <div class="mode-card" id="mode-ocr" onclick="setMode('ocr')">
+      <div class="mode-icon">🔍</div>
+      <div class="mode-label">استخراج نصي (OCR)</div>
+      <div class="mode-desc">يستخرج النص من صورة البيانات ويعرضه كطبقة نصية</div>
+    </div>
+    <div class="mode-card" id="mode-sidebyside" onclick="setMode('sidebyside')">
+      <div class="mode-icon">⬛⬛</div>
+      <div class="mode-label">جنبًا إلى جنب</div>
+      <div class="mode-desc">يضع الصورتين بجانب بعضهما في صورة واحدة</div>
+    </div>
+  </div>
+
+  <!-- ── UPLOAD ── -->
+  <div class="upload-grid">
+
+    <!-- Card A: Signatures -->
+    <div class="upload-card" id="dropA"
+         ondragover="onDragOver(event,'A')" ondragleave="onDragLeave('A')" ondrop="onDrop(event,'A')">
+      <input type="file" accept="image/*" id="fileA" onchange="loadImage('A',this)" />
+      <div class="upload-badge">📝 صورة أ</div>
+      <div class="upload-icon" id="iconA">✍️</div>
+      <div class="upload-title">صورة التوقيعات (بدون بيانات)</div>
+      <div class="upload-hint">الجدول الذي يحتوي على توقيعات الموظفين والخانات فارغة</div>
+      <div class="preview-box" id="previewWrapA" style="display:none">
+        <img id="previewA" src="" alt="معاينة أ" />
+        <button class="preview-clear" onclick="clearImage('A',event)">✕</button>
+      </div>
+    </div>
+
+    <!-- Card B: Data -->
+    <div class="upload-card" id="dropB"
+         ondragover="onDragOver(event,'B')" ondragleave="onDragLeave('B')" ondrop="onDrop(event,'B')">
+      <input type="file" accept="image/*" id="fileB" onchange="loadImage('B',this)" />
+      <div class="upload-badge" style="background:var(--success)">📊 صورة ب</div>
+      <div class="upload-icon" id="iconB">📋</div>
+      <div class="upload-title">صورة البيانات (بدون توقيعات)</div>
+      <div class="upload-hint">الجدول الذي يحتوي على أسماء وبيانات الموظفين</div>
+      <div class="preview-box" id="previewWrapB" style="display:none">
+        <img id="previewB" src="" alt="معاينة ب" />
+        <button class="preview-clear" onclick="clearImage('B',event)">✕</button>
+      </div>
+    </div>
+
+  </div><!-- /upload-grid -->
+
+  <!-- ── OCR SECTION ── -->
+  <div class="ocr-section" id="ocrSection">
+    <div class="section-title">🔍 استخراج النص (OCR)</div>
+    <div class="alert alert-warning" id="ocrLangNote">
+      <span>⚠️</span>
+      <span>للنصوص العربية، اختر "Arabic" من قائمة اللغة. للنصوص الإنجليزية اختر "English".</span>
+    </div>
+    <div class="controls-grid" style="margin-bottom:16px">
+      <div class="control-group">
+        <label>لغة النص في الصورة</label>
+        <select id="ocrLang">
+          <option value="ara">العربية</option>
+          <option value="eng" selected>الإنجليزية</option>
+          <option value="ara+eng">عربي + إنجليزي</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="ocrBtn" onclick="runOCR()">
+      <span class="spinner" id="ocrSpinner" style="display:none"></span>
+      <span id="ocrBtnText">🔍 استخراج النص من صورة البيانات</span>
+    </button>
+    <div class="progress-wrap" id="ocrProgress" style="margin-top:12px;display:none">
+      <div class="progress-bar" id="ocrBar"></div>
+    </div>
+    <div class="progress-label" id="ocrStatus"></div>
+    <div style="margin-top:14px;">
+      <div class="section-title" style="font-size:.9rem;margin-bottom:8px;">النص المستخرج:</div>
+      <div class="ocr-result" id="ocrResult"></div>
+    </div>
+  </div>
+
+  <!-- ── CANVAS SECTION ── -->
+  <div class="canvas-section" id="canvasSection">
+    <div class="section-title">🎨 الدمج والضبط</div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('merge',this)">⚙️ إعدادات الدمج</button>
+      <button class="tab" onclick="switchTab('position',this)">📐 الموضع والحجم</button>
+      <button class="tab" onclick="switchTab('color',this)">🎨 المرشحات</button>
+    </div>
+
+    <!-- Tab: Merge -->
+    <div id="tab-merge">
+      <div class="controls-grid">
+        <div class="control-group">
+          <label>شفافية صورة أ (التوقيعات)</label>
+          <input type="range" id="alphaA" min="0" max="100" value="100" oninput="render();updateVal('alphaA','valA')" />
+          <div class="range-val" id="valA">100%</div>
+        </div>
+        <div class="control-group">
+          <label>شفافية صورة ب (البيانات)</label>
+          <input type="range" id="alphaB" min="0" max="100" value="70" oninput="render();updateVal('alphaB','valB')" />
+          <div class="range-val" id="valB">70%</div>
+        </div>
+        <div class="control-group">
+          <label>نمط المزج</label>
+          <select id="blendMode" onchange="render()">
+            <option value="source-over">عادي</option>
+            <option value="multiply">ضرب (Multiply)</option>
+            <option value="screen">شاشة (Screen)</option>
+            <option value="overlay">تراكب (Overlay)</option>
+            <option value="darken">تعتيم (Darken)</option>
+            <option value="lighten">تفتيح (Lighten)</option>
+            <option value="color-dodge">إضاءة (Color Dodge)</option>
+            <option value="difference">فرق (Difference)</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>طريقة التداخل</label>
+          <select id="orderMode" onchange="render()">
+            <option value="B_on_A">ب فوق أ (البيانات فوق التوقيعات)</option>
+            <option value="A_on_B">أ فوق ب (التوقيعات فوق البيانات)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Position -->
+    <div id="tab-position" style="display:none">
+      <div class="controls-grid">
+        <div class="control-group">
+          <label>إزاحة أفقية لصورة ب (بكسل)</label>
+          <input type="number" id="offsetX" value="0" oninput="render()" />
+        </div>
+        <div class="control-group">
+          <label>إزاحة رأسية لصورة ب (بكسل)</label>
+          <input type="number" id="offsetY" value="0" oninput="render()" />
+        </div>
+        <div class="control-group">
+          <label>حجم صورة ب (%)</label>
+          <input type="range" id="scaleB" min="10" max="200" value="100" oninput="render();updateVal('scaleB','valScale')" />
+          <div class="range-val" id="valScale">100%</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:8px">
+        <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:8px">تحريك صورة ب:</div>
+        <div class="pos-controls">
+          <div></div>
+          <button class="pos-btn" onclick="move(0,-10)">▲</button>
+          <div></div>
+          <button class="pos-btn" onclick="move(-10,0)">◄</button>
+          <button class="pos-btn center" onclick="resetPos()">⊙</button>
+          <button class="pos-btn" onclick="move(10,0)">►</button>
+          <div></div>
+          <button class="pos-btn" onclick="move(0,10)">▼</button>
+          <div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Color -->
+    <div id="tab-color" style="display:none">
+      <div class="controls-grid">
+        <div class="control-group">
+          <label>درجة السطوع</label>
+          <input type="range" id="brightness" min="50" max="200" value="100" oninput="render();updateVal('brightness','valBright','%')" />
+          <div class="range-val" id="valBright">100%</div>
+        </div>
+        <div class="control-group">
+          <label>التباين</label>
+          <input type="range" id="contrast" min="50" max="200" value="100" oninput="render();updateVal('contrast','valContrast','%')" />
+          <div class="range-val" id="valContrast">100%</div>
+        </div>
+        <div class="control-group">
+          <label>التشبع اللوني</label>
+          <input type="range" id="saturate" min="0" max="200" value="100" oninput="render();updateVal('saturate','valSat','%')" />
+          <div class="range-val" id="valSat">100%</div>
+        </div>
+        <div class="control-group">
+          <label>ضبط الحدة</label>
+          <select id="sharpen" onchange="render()">
+            <option value="none">بدون</option>
+            <option value="sharp">حادة</option>
+            <option value="vsharp">حادة جداً</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Canvas Preview -->
+    <div class="canvas-center" style="margin-top:24px">
+      <div class="canvas-wrap">
+        <canvas id="mainCanvas"></canvas>
+      </div>
+    </div>
+
+    <div class="actions-row" style="justify-content:center;margin-top:24px">
+      <button class="btn btn-ghost" onclick="render()">🔄 تحديث المعاينة</button>
+      <button class="btn btn-warning" onclick="resetAll()">↺ إعادة التعيين</button>
+      <button class="btn btn-success btn-lg" onclick="downloadImage()">
+        ⬇️ تنزيل الصورة النهائية
+      </button>
+    </div>
+
+    <!-- Format & Quality -->
+    <div class="controls-grid" style="margin-top:20px">
+      <div class="control-group">
+        <label>صيغة التنزيل</label>
+        <select id="dlFormat">
+          <option value="png">PNG (جودة عالية)</option>
+          <option value="jpeg">JPEG (حجم أصغر)</option>
+          <option value="webp">WebP (الأفضل)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>جودة الصورة (JPEG/WebP)</label>
+        <input type="range" id="dlQuality" min="50" max="100" value="95" oninput="updateVal('dlQuality','valQ','%')" />
+        <div class="range-val" id="valQ">95%</div>
+      </div>
+    </div>
+
+  </div><!-- /canvas-section -->
+
+  <!-- ── SIDE-BY-SIDE SECTION ── -->
+  <div id="sbsSection" style="display:none;margin-bottom:24px">
+    <div class="canvas-section visible">
+      <div class="section-title">↔️ عرض جنبًا إلى جنب</div>
+      <div class="controls-grid">
+        <div class="control-group">
+          <label>اتجاه الدمج</label>
+          <select id="sbsDir" onchange="renderSBS()">
+            <option value="h">أفقي (جنبًا إلى جنب)</option>
+            <option value="v">رأسي (فوق وتحت)</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>مسافة بين الصورتين (بكسل)</label>
+          <input type="range" id="sbsGap" min="0" max="60" value="10" oninput="renderSBS();updateVal('sbsGap','valGap','px')" />
+          <div class="range-val" id="valGap">10px</div>
+        </div>
+      </div>
+      <div class="canvas-center" style="margin-top:16px">
+        <div class="canvas-wrap">
+          <canvas id="sbsCanvas"></canvas>
+        </div>
+      </div>
+      <div class="actions-row" style="justify-content:center;margin-top:20px">
+        <button class="btn btn-success btn-lg" onclick="downloadSBS()">⬇️ تنزيل الصورة المدمجة</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ────────────────────────────────────────────────
+// STATE
+// ────────────────────────────────────────────────
+const state = {
+  imgA: null,   // HTMLImageElement
+  imgB: null,
+  mode: 'overlay',
+  ocrText: ''
+};
+
+// ────────────────────────────────────────────────
+// MODE
+// ────────────────────────────────────────────────
+function setMode(m) {
+  state.mode = m;
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('mode-' + m).classList.add('selected');
+  updateUI();
+}
+
+// ────────────────────────────────────────────────
+// FILE UPLOAD
+// ────────────────────────────────────────────────
+function loadImage(side, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      state['img' + side] = img;
+      document.getElementById('previewWrapA'.replace('A', side)).style.display = 'block';
+      document.getElementById('preview' + side).src = e.target.result;
+      document.getElementById('iconA'.replace('A', side)).style.display = 'none';
+      document.getElementById('drop' + side).classList.add('has-file');
+      updateUI();
+      if (state.imgA && state.imgB) toast('✅ كلتا الصورتين جاهزتان! اضغط "دمج" أو قم بضبط الإعدادات.');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadImageSide(side, file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      state['img' + side] = img;
+      document.getElementById('previewWrap' + side).style.display = 'block';
+      document.getElementById('preview' + side).src = e.target.result;
+      document.getElementById('icon' + side).style.display = 'none';
+      document.getElementById('drop' + side).classList.add('has-file');
+      updateUI();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearImage(side, e) {
+  e.stopPropagation();
+  state['img' + side] = null;
+  document.getElementById('previewWrap' + side).style.display = 'none';
+  document.getElementById('icon' + side).style.display = '';
+  document.getElementById('drop' + side).classList.remove('has-file');
+  document.getElementById('file' + side).value = '';
+  updateUI();
+}
+
+// ── Drag & Drop ──
+function onDragOver(e, side) {
+  e.preventDefault();
+  document.getElementById('drop' + side).classList.add('drag-over');
+}
+function onDragLeave(side) {
+  document.getElementById('drop' + side).classList.remove('drag-over');
+}
+function onDrop(e, side) {
+  e.preventDefault();
+  document.getElementById('drop' + side).classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadImageSide(side, file);
+}
+
+// ────────────────────────────────────────────────
+// UI UPDATES
+// ────────────────────────────────────────────────
+function updateUI() {
+  const hasA = !!state.imgA, hasB = !!state.imgB;
+  const hasBoth = hasA && hasB;
+
+  // Steps
+  markStep(1, hasA || hasB, hasBoth);
+  markStep(2, hasBoth, state.ocrText.length > 0);
+  markStep(3, hasBoth, false);
+
+  // OCR section
+  const ocrSec = document.getElementById('ocrSection');
+  if (state.mode === 'ocr' && hasB) ocrSec.classList.add('visible');
+  else ocrSec.classList.remove('visible');
+
+  // Canvas section
+  if (state.mode === 'overlay' && hasBoth) {
+    document.getElementById('canvasSection').classList.add('visible');
+    document.getElementById('sbsSection').style.display = 'none';
+    render();
+  } else if (state.mode === 'sidebyside' && hasBoth) {
+    document.getElementById('canvasSection').classList.remove('visible');
+    document.getElementById('sbsSection').style.display = 'block';
+    renderSBS();
+  } else {
+    document.getElementById('canvasSection').classList.remove('visible');
+    document.getElementById('sbsSection').style.display = 'none';
+  }
+}
+
+function markStep(n, active, done) {
+  const el = document.getElementById('s' + n);
+  el.classList.toggle('active', active && !done);
+  el.classList.toggle('done', done);
+  if (done) el.querySelector('.step-num').textContent = '✓';
+  else el.querySelector('.step-num').textContent = n;
+}
+
+function updateVal(id, valId, suffix='%') {
+  const v = document.getElementById(id).value;
+  document.getElementById(valId).textContent = v + suffix;
+}
+
+function switchTab(name, btn) {
+  ['merge','position','color'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ────────────────────────────────────────────────
+// RENDER (OVERLAY MODE)
+// ────────────────────────────────────────────────
+function render() {
+  if (!state.imgA || !state.imgB) return;
+  const canvas = document.getElementById('mainCanvas');
+  const ctx    = canvas.getContext('2d');
+
+  const w = Math.max(state.imgA.naturalWidth,  state.imgB.naturalWidth);
+  const h = Math.max(state.imgA.naturalHeight, state.imgB.naturalHeight);
+  canvas.width  = w;
+  canvas.height = h;
+
+  const alphaA = +document.getElementById('alphaA').value / 100;
+  const alphaB = +document.getElementById('alphaB').value / 100;
+  const blend  = document.getElementById('blendMode').value;
+  const order  = document.getElementById('orderMode').value;
+  const offX   = +document.getElementById('offsetX').value;
+  const offY   = +document.getElementById('offsetY').value;
+  const scale  = +document.getElementById('scaleB').value / 100;
+
+  // Filters
+  const brt = document.getElementById('brightness').value;
+  const ctr = document.getElementById('contrast').value;
+  const sat = document.getElementById('saturate').value;
+  const flt = `brightness(${brt}%) contrast(${ctr}%) saturate(${sat}%)`;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const drawA = () => {
+    ctx.globalAlpha = alphaA;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = flt;
+    ctx.drawImage(state.imgA, 0, 0, w, h);
+    ctx.filter = 'none';
+  };
+
+  const drawB = () => {
+    ctx.globalAlpha = alphaB;
+    ctx.globalCompositeOperation = blend;
+    ctx.filter = flt;
+    const bw = state.imgB.naturalWidth  * scale;
+    const bh = state.imgB.naturalHeight * scale;
+    ctx.drawImage(state.imgB, offX, offY, bw, bh);
+    ctx.filter = 'none';
+  };
+
+  if (order === 'B_on_A') { drawA(); drawB(); }
+  else                    { drawB(); drawA(); }
+
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
+  // Sharpen
+  const sharpMode = document.getElementById('sharpen').value;
+  if (sharpMode !== 'none') applySharpen(ctx, w, h, sharpMode === 'vsharp');
+}
+
+function applySharpen(ctx, w, h, strong) {
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  const k = strong
+    ? [0,-1,0,-1,5,-1,0,-1,0]
+    : [0,-0.5,0,-0.5,3,-0.5,0,-0.5,0];
+  const copy = new Uint8ClampedArray(d);
+  for (let y = 1; y < h-1; y++) {
+    for (let x = 1; x < w-1; x++) {
+      for (let c = 0; c < 3; c++) {
+        let v = 0;
+        for (let ky = -1; ky <= 1; ky++)
+          for (let kx = -1; kx <= 1; kx++)
+            v += copy[((y+ky)*w+(x+kx))*4+c] * k[(ky+1)*3+(kx+1)];
+        d[(y*w+x)*4+c] = Math.max(0, Math.min(255, v));
+      }
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// ────────────────────────────────────────────────
+// RENDER (SIDE BY SIDE)
+// ────────────────────────────────────────────────
+function renderSBS() {
+  if (!state.imgA || !state.imgB) return;
+  const canvas = document.getElementById('sbsCanvas');
+  const ctx = canvas.getContext('2d');
+  const dir = document.getElementById('sbsDir').value;
+  const gap = +document.getElementById('sbsGap').value;
+
+  const aw = state.imgA.naturalWidth, ah = state.imgA.naturalHeight;
+  const bw = state.imgB.naturalWidth, bh = state.imgB.naturalHeight;
+
+  if (dir === 'h') {
+    const maxH = Math.max(ah, bh);
+    canvas.width  = aw + bw + gap;
+    canvas.height = maxH;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(state.imgA, 0, 0, aw, ah);
+    ctx.drawImage(state.imgB, aw + gap, 0, bw, bh);
+  } else {
+    const maxW = Math.max(aw, bw);
+    canvas.width  = maxW;
+    canvas.height = ah + bh + gap;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(state.imgA, 0, 0, aw, ah);
+    ctx.drawImage(state.imgB, 0, ah + gap, bw, bh);
+  }
+}
+
+// ────────────────────────────────────────────────
+// OCR
+// ────────────────────────────────────────────────
+async function runOCR() {
+  if (!state.imgB) { toast('⚠️ يرجى رفع صورة البيانات (ب) أولاً'); return; }
+  const lang = document.getElementById('ocrLang').value;
+  const btn  = document.getElementById('ocrBtn');
+  const spinner = document.getElementById('ocrSpinner');
+  const btnText = document.getElementById('ocrBtnText');
+  const progress = document.getElementById('ocrProgress');
+  const bar = document.getElementById('ocrBar');
+  const status = document.getElementById('ocrStatus');
+  const result = document.getElementById('ocrResult');
+
+  btn.disabled = true;
+  spinner.style.display = '';
+  btnText.textContent   = 'جارٍ الاستخراج...';
+  progress.style.display = '';
+  result.classList.remove('visible');
+
+  try {
+    const worker = await Tesseract.createWorker(lang, 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const p = Math.round(m.progress * 100);
+          bar.style.width = p + '%';
+          status.textContent = `استخراج النص: ${p}%`;
+        } else {
+          status.textContent = m.status;
+        }
+      }
+    });
+
+    const { data: { text } } = await worker.recognize(state.imgB.src);
+    await worker.terminate();
+
+    state.ocrText = text;
+    result.textContent = text || '(لم يتم العثور على نص)';
+    result.classList.add('visible');
+    bar.style.width = '100%';
+    status.textContent = '✅ اكتمل الاستخراج';
+    toast('✅ تم استخراج النص بنجاح!');
+    markStep(2, true, true);
+
+    if (state.imgA) {
+      document.getElementById('canvasSection').classList.add('visible');
+      renderWithOCR();
+    }
+  } catch(err) {
+    status.textContent = '❌ خطأ: ' + err.message;
+    toast('❌ فشل الاستخراج. تأكد من الاتصال بالإنترنت.');
+  } finally {
+    btn.disabled  = false;
+    spinner.style.display = 'none';
+    btnText.textContent   = '🔍 استخراج النص من صورة البيانات';
+  }
+}
+
+function renderWithOCR() {
+  if (!state.imgA) return;
+  const canvas = document.getElementById('mainCanvas');
+  const ctx    = canvas.getContext('2d');
+  canvas.width  = state.imgA.naturalWidth;
+  canvas.height = state.imgA.naturalHeight;
+  ctx.drawImage(state.imgA, 0, 0);
+
+  if (state.ocrText) {
+    ctx.fillStyle = 'rgba(0,0,30,0.75)';
+    ctx.fillRect(0, canvas.height - 120, canvas.width, 120);
+    ctx.fillStyle = '#fff';
+    ctx.font = `${Math.max(14, Math.round(canvas.width/50))}px monospace`;
+    ctx.textAlign = 'right';
+    const lines = state.ocrText.split('\n').filter(l=>l.trim()).slice(0,4);
+    lines.forEach((line, i) => {
+      ctx.fillText(line.substring(0, 80), canvas.width - 10, canvas.height - 90 + i * 22);
+    });
+  }
+  document.getElementById('canvasSection').classList.add('visible');
+}
+
+// ────────────────────────────────────────────────
+// POSITION / RESET
+// ────────────────────────────────────────────────
+function move(dx, dy) {
+  document.getElementById('offsetX').value = +document.getElementById('offsetX').value + dx;
+  document.getElementById('offsetY').value = +document.getElementById('offsetY').value + dy;
+  render();
+}
+
+function resetPos() {
+  document.getElementById('offsetX').value = 0;
+  document.getElementById('offsetY').value = 0;
+  document.getElementById('scaleB').value  = 100;
+  document.getElementById('valScale').textContent = '100%';
+  render();
+}
+
+function resetAll() {
+  document.getElementById('alphaA').value     = 100;  document.getElementById('valA').textContent  = '100%';
+  document.getElementById('alphaB').value     = 70;   document.getElementById('valB').textContent  = '70%';
+  document.getElementById('blendMode').value  = 'source-over';
+  document.getElementById('orderMode').value  = 'B_on_A';
+  document.getElementById('brightness').value = 100;  document.getElementById('valBright').textContent = '100%';
+  document.getElementById('contrast').value   = 100;  document.getElementById('valContrast').textContent = '100%';
+  document.getElementById('saturate').value   = 100;  document.getElementById('valSat').textContent = '100%';
+  document.getElementById('sharpen').value    = 'none';
+  resetPos();
+  toast('↺ تمت إعادة تعيين جميع الإعدادات');
+}
+
+// ────────────────────────────────────────────────
+// DOWNLOAD
+// ────────────────────────────────────────────────
+function downloadImage() {
+  const canvas = document.getElementById('mainCanvas');
+  const fmt    = document.getElementById('dlFormat').value;
+  const q      = +document.getElementById('dlQuality').value / 100;
+  const mime   = fmt === 'png' ? 'image/png' : fmt === 'jpeg' ? 'image/jpeg' : 'image/webp';
+  const url    = canvas.toDataURL(mime, q);
+  const a      = document.createElement('a');
+  a.href       = url;
+  a.download   = 'merged-image.' + fmt;
+  a.click();
+  toast('⬇️ تم تنزيل الصورة المدمجة!');
+  markStep(4, true, true);
+}
+
+function downloadSBS() {
+  const canvas = document.getElementById('sbsCanvas');
+  const url    = canvas.toDataURL('image/png');
+  const a      = document.createElement('a');
+  a.href       = url;
+  a.download   = 'side-by-side.png';
+  a.click();
+  toast('⬇️ تم تنزيل الصورة!');
+}
+
+// ────────────────────────────────────────────────
+// TOAST
+// ────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ────────────────────────────────────────────────
+// INIT
+// ────────────────────────────────────────────────
+document.getElementById('valB').textContent = '70%';
+</script>
+</body>
+</html>
